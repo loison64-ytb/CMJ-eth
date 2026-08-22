@@ -1,4 +1,4 @@
-const button=document.querySelector('.menu');const header=document.querySelector('.header');button?.addEventListener('click',()=>header.classList.toggle('open'));document.querySelectorAll('nav a').forEach(link=>link.addEventListener('click',()=>header.classList.remove('open')));
+if(!document.querySelector('link[href="motion.css"]')){const motion=document.createElement('link');motion.rel='stylesheet';motion.href='motion.css';document.head.appendChild(motion);}const button=document.querySelector('.menu');const header=document.querySelector('.header');button?.addEventListener('click',()=>header.classList.toggle('open'));document.querySelectorAll('nav a').forEach(link=>link.addEventListener('click',()=>header.classList.remove('open')));
 
 const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(!reduceMotion){
