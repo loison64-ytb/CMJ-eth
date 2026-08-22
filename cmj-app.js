@@ -1,6 +1,6 @@
 const cmjDb = supabase.createClient(window.CMJ_SUPABASE_URL, window.CMJ_SUPABASE_KEY);
 
-function esc(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function esc(v=''){return String(v).replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));}
 function frDate(v){return new Intl.DateTimeFormat('fr-FR',{dateStyle:'long',timeStyle:'short'}).format(new Date(v));}
 function setMsg(el,msg,type='ok'){if(!el)return;el.textContent=msg;el.className='form-message '+type;}
 
@@ -36,6 +36,14 @@ async function initEvents(){
  }));
 }
 
+async function initProjects(){
+ const root=document.querySelector('#projects-list'); if(!root)return;
+ const {data,error}=await cmjDb.from('projects').select('*').in('status',['published','completed']).order('created_at',{ascending:false});
+ if(error){root.innerHTML='<div class="notice">Impossible de charger les projets pour le moment.</div>';return;}
+ if(!data?.length){root.innerHTML='<div class="notice">Aucun projet publié pour le moment.</div>';return;}
+ root.innerHTML=data.map(p=>`<article><div class="pic">💡</div><small>${p.status==='completed'?'RÉALISÉ':'PROJET'}</small><h3>${esc(p.title)}</h3><p>${esc(p.description)}</p><b>● ${p.status==='completed'?'Réalisé':'Publié'}</b></article>`).join('');
+}
+
 async function isAdmin(){const {data:{session}}=await cmjDb.auth.getSession();if(!session)return false;const {data,error}=await cmjDb.rpc('is_cmj_admin');return !error&&data===true;}
 async function initAdmin(){
  const login=document.querySelector('#admin-login'); if(!login)return;
@@ -43,16 +51,17 @@ async function initAdmin(){
  async function refreshAuth(){const ok=await isAdmin();login.hidden=ok;dashboard.hidden=!ok;if(ok){await loadAdmin();}}
  document.querySelector('#admin-signin').addEventListener('click',async()=>{const email=document.querySelector('#admin-email').value.trim();const password=document.querySelector('#admin-password').value;const {error}=await cmjDb.auth.signInWithPassword({email,password});if(error){setMsg(loginMsg,'Connexion impossible : vérifie tes identifiants.','error');return;}const ok=await isAdmin();if(!ok){await cmjDb.auth.signOut();setMsg(loginMsg,"Ce compte n'est pas autorisé à accéder à l'administration.",'error');return;}await refreshAuth();});
  document.querySelector('#admin-logout').addEventListener('click',async()=>{await cmjDb.auth.signOut();location.reload();});
- document.querySelector('#event-create-form').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const {error}=await cmjDb.from('events').insert({title:fd.get('title'),description:fd.get('description'),event_date:new Date(fd.get('date')).toISOString(),location:fd.get('location'),capacity:fd.get('capacity')?Number(fd.get('capacity')):null,registration_deadline:fd.get('deadline')?new Date(fd.get('deadline')).toISOString():null,status:fd.get('status')});const msg=document.querySelector('#event-create-message');if(error){setMsg(msg,error.message,'error');return;}e.currentTarget.reset();setMsg(msg,'Événement enregistré.');await loadAdmin();});
+ document.querySelector('#event-create-form')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const {error}=await cmjDb.from('events').insert({title:fd.get('title'),description:fd.get('description'),event_date:new Date(fd.get('date')).toISOString(),location:fd.get('location'),capacity:fd.get('capacity')?Number(fd.get('capacity')):null,registration_deadline:fd.get('deadline')?new Date(fd.get('deadline')).toISOString():null,status:fd.get('status')});const msg=document.querySelector('#event-create-message');if(error){setMsg(msg,error.message,'error');return;}e.currentTarget.reset();setMsg(msg,'Événement enregistré.');await loadAdmin();});
+ document.querySelector('#project-create-form')?.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);const {error}=await cmjDb.from('projects').insert({title:fd.get('title'),description:fd.get('description'),status:fd.get('status')});const msg=document.querySelector('#project-create-message');if(error){setMsg(msg,error.message,'error');return;}e.currentTarget.reset();setMsg(msg,'Projet enregistré.');await loadAdmin();});
  await refreshAuth();
 }
 async function loadAdmin(){
- const eventsBox=document.querySelector('#admin-events'); const appsBox=document.querySelector('#admin-applications'); const regsBox=document.querySelector('#admin-registrations');
- const [evRes,appRes,regRes]=await Promise.all([cmjDb.from('events').select('*').order('event_date'),cmjDb.from('cmj_applications').select('*').order('created_at',{ascending:false}),cmjDb.from('event_registrations').select('*,events(title)').order('created_at',{ascending:false})]);
- eventsBox.innerHTML=(evRes.data||[]).map(e=>`<div class="admin-row"><div><strong>${esc(e.title)}</strong><small>${esc(frDate(e.event_date))} • ${esc(e.status)}</small></div><button class="small-btn" data-close-event="${e.id}">${e.status==='closed'?'Fermé':'Fermer'}</button></div>`).join('')||'<p>Aucun événement.</p>';
- appsBox.innerHTML=(appRes.data||[]).map(a=>`<div class="admin-row"><div><strong>${esc(a.first_name)} ${esc(a.last_name)}</strong><small>${esc(a.guardian_email)} • ${esc(a.guardian_phone)} • ${esc(a.status)}</small><p>${esc(a.motivation)}</p></div></div>`).join('')||'<p>Aucune candidature.</p>';
- regsBox.innerHTML=(regRes.data||[]).map(r=>`<div class="admin-row"><div><strong>${esc(r.participant_first_name)} ${esc(r.participant_last_name)}</strong><small>${esc(r.events?.title||'Événement')} • ${esc(r.guardian_email)} • ${esc(r.guardian_phone||'')}</small></div></div>`).join('')||'<p>Aucune inscription.</p>';
- eventsBox.querySelectorAll('[data-close-event]').forEach(b=>b.addEventListener('click',async()=>{await cmjDb.from('events').update({status:'closed',updated_at:new Date().toISOString()}).eq('id',b.dataset.closeEvent);await loadAdmin();}));
+ const eventsBox=document.querySelector('#admin-events'); const projectsBox=document.querySelector('#admin-projects'); const appsBox=document.querySelector('#admin-applications'); const regsBox=document.querySelector('#admin-registrations');
+ const [evRes,prRes,appRes,regRes]=await Promise.all([cmjDb.from('events').select('*').order('event_date'),cmjDb.from('projects').select('*').order('created_at',{ascending:false}),cmjDb.from('cmj_applications').select('*').order('created_at',{ascending:false}),cmjDb.from('event_registrations').select('*,events(title)').order('created_at',{ascending:false})]);
+ if(eventsBox){eventsBox.innerHTML=(evRes.data||[]).map(e=>`<div class="admin-row"><div><strong>${esc(e.title)}</strong><small>${esc(frDate(e.event_date))} • ${esc(e.status)}</small></div><button class="small-btn" data-close-event="${e.id}">${e.status==='closed'?'Fermé':'Fermer'}</button></div>`).join('')||'<p>Aucun événement.</p>';eventsBox.querySelectorAll('[data-close-event]').forEach(b=>b.addEventListener('click',async()=>{await cmjDb.from('events').update({status:'closed',updated_at:new Date().toISOString()}).eq('id',b.dataset.closeEvent);await loadAdmin();}));}
+ if(projectsBox){projectsBox.innerHTML=(prRes.data||[]).map(p=>`<div class="admin-row"><div><strong>${esc(p.title)}</strong><small>${esc(p.status)}</small><p>${esc(p.description)}</p></div><button class="small-btn" data-delete-project="${p.id}">Supprimer</button></div>`).join('')||'<p>Aucun projet.</p>';projectsBox.querySelectorAll('[data-delete-project]').forEach(b=>b.addEventListener('click',async()=>{if(!confirm('Supprimer ce projet ?'))return;await cmjDb.from('projects').delete().eq('id',b.dataset.deleteProject);await loadAdmin();}));}
+ if(appsBox)appsBox.innerHTML=(appRes.data||[]).map(a=>`<div class="admin-row"><div><strong>${esc(a.first_name)} ${esc(a.last_name)}</strong><small>${esc(a.guardian_email)} • ${esc(a.guardian_phone)} • ${esc(a.status)}</small><p>${esc(a.motivation)}</p></div></div>`).join('')||'<p>Aucune candidature.</p>';
+ if(regsBox)regsBox.innerHTML=(regRes.data||[]).map(r=>`<div class="admin-row"><div><strong>${esc(r.participant_first_name)} ${esc(r.participant_last_name)}</strong><small>${esc(r.events?.title||'Événement')} • ${esc(r.guardian_email)} • ${esc(r.guardian_phone||'')}</small></div></div>`).join('')||'<p>Aucune inscription.</p>';
 }
 
-document.addEventListener('DOMContentLoaded',()=>{initApplications();initEvents();initAdmin();});
+document.addEventListener('DOMContentLoaded',()=>{initApplications();initEvents();initProjects();initAdmin();});
